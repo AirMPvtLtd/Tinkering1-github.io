@@ -14,8 +14,6 @@
     <script src="https://cdn.jsdelivr.net/npm/axios@1.6.7/dist/axios.min.js"></script>
     <!-- Monaco Editor CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.0/min/vs/loader.min.js"></script>
-    <!-- p5.js CDN for Artificial Horizon -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.min.js"></script>
     <style>
         @keyframes spin {
             0% { transform: rotate(0deg); }
@@ -46,13 +44,22 @@
     <script type="text/babel">
         // Sample Code Snippets
         const codeSnippets = {
-            'PID Controller': `def pid_update(target, current, dt, kp=1.0, ki=0.05, kd=0.2):
-    error = target - current
-    integral = (integral + error * dt) if 'integral' in globals() else error * dt
-    derivative = (error - (prev_error if 'prev_error' in globals() else 0)) / dt
-    globals()['prev_error'] = error
-    globals()['integral'] = integral
-    return kp * error + ki * integral + kd * derivative`,
+            'PID Controller': `class PIDController {
+                constructor(kp=1.0, ki=0.05, kd=0.2) {
+                    this.kp = kp;
+                    this.ki = ki;
+                    this.kd = kd;
+                    this.integral = 0;
+                    this.prev_error = 0;
+                }
+                update(target, current, dt) {
+                    const error = target - current;
+                    this.integral += error * dt;
+                    const derivative = (error - this.prev_error) / dt;
+                    this.prev_error = error;
+                    return this.kp * error + this.ki * this.integral + this.kd * derivative;
+                }
+            }`,
             'A* Algorithm': `def a_star(start, goal, graph):
     open_set = {start}
     g_score = {start: 0}
@@ -94,7 +101,7 @@
 
         // Algorithm Section
         function AlgorithmSection({ onSelect }) {
-            const algorithms = ['A* Algorithm', 'Dijkstra's Algorithm'];
+            const algorithms = ['A* Algorithm', 'Dijkstra’s Algorithm'];
             return (
                 <div className="bg-gray-900 p-6 futuristic-border h-[150px] flex flex-col justify-center animate-[pulse_2s_infinite]">
                     <h2 className="text-xl font-bold mb-4 text-[#00FF00]">ALGO MODULE</h2>
@@ -141,95 +148,110 @@
             );
         }
 
-        // Simulation Window with Artificial Horizon
+        // Simulation Window with Circular Artificial Horizon
         function SimulationWindow({ selectedType, selectedValue }) {
             const canvasRef = React.useRef(null);
-            const p5Ref = React.useRef(null);
 
             React.useEffect(() => {
-                if (canvasRef.current && !p5Ref.current) {
-                    const sketch = (p5) => {
-                        p5.setup = () => {
-                            p5.createCanvas(400, 400).parent(canvasRef.current);
-                            p5.angleMode(p5.DEGREES);
-                        };
+                const canvas = canvasRef.current;
+                if (!canvas) return;
 
-                        p5.draw = () => {
-                            p5.background(50);
+                const ctx = canvas.getContext('2d');
+                const radius = canvas.width / 2; // Diameter is 400px, radius is 200px
+                let animationFrameId;
 
-                            // Calculate roll and pitch
-                            let roll = 0;
-                            let pitch = 0;
-                            if (selectedType === 'controller' && selectedValue === 'PID Controller') {
-                                roll = p5.sin(p5.frameCount * 2) * 30; // -30° to 30°
-                                pitch = p5.cos(p5.frameCount * 2) * 20; // -20° to 20°
-                            } else if (selectedType === 'algorithm' && selectedValue === 'A* Algorithm') {
-                                roll = p5.sin(p5.frameCount * 1.5) * 45; // -45° to 45°
-                                pitch = p5.sin(p5.frameCount * 1) * 60; // -60° to 60°
-                            }
+                const animate = () => {
+                    // Clear canvas
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-                            // Artificial Horizon
-                            p5.push();
-                            p5.translate(p5.width / 2, p5.height / 2);
+                    // Calculate roll and pitch
+                    let roll = 0;
+                    let pitch = 0;
+                    const time = Date.now() * 0.001; // Use time for smooth animation
+                    if (selectedType === 'controller' && selectedValue === 'PID Controller') {
+                        roll = Math.sin(time * 2) * 30; // -30° to 30°
+                        pitch = Math.cos(time * 2) * 20; // -20° to 20°
+                    } else if (selectedType === 'algorithm' && selectedValue === 'A* Algorithm') {
+                        roll = Math.sin(time * 1.5) * 45; // -45° to 45°
+                        pitch = Math.sin(time * 1) * 60; // -60° to 60°
+                    }
 
-                            // Sky (Blue)
-                            p5.fill(0, 191, 255);
-                            p5.noStroke();
-                            p5.rect(-200, -200 - pitch, 400, 200 + pitch);
+                    // Translate to center
+                    ctx.save();
+                    ctx.translate(canvas.width / 2, canvas.height / 2);
 
-                            // Ground (Brown)
-                            p5.fill(139, 69, 19);
-                            p5.rect(-200, -pitch, 400, 200 + pitch);
+                    // Draw circular horizon
+                    const horizonRadius = radius * 0.8; // Slightly smaller circle for horizon effect
+                    const pitchOffset = (pitch / 90) * (horizonRadius * 0.5); // Scale pitch to fit circle
 
-                            // Rotate for roll
-                            p5.rotate(roll);
+                    // Sky (Blue) - Upper half of circle
+                    ctx.fillStyle = 'rgb(0, 191, 255)';
+                    ctx.beginPath();
+                    ctx.arc(0, -pitchOffset, horizonRadius, 0, Math.PI, true);
+                    ctx.fill();
 
-                            // Horizon Line
-                            p5.stroke(255);
-                            p5.strokeWeight(2);
-                            p5.line(-200, 0, 200, 0);
+                    // Ground (Brown) - Lower half of circle
+                    ctx.fillStyle = 'rgb(139, 69, 19)';
+                    ctx.beginPath();
+                    ctx.arc(0, -pitchOffset, horizonRadius, 0, Math.PI, false);
+                    ctx.fill();
 
-                            // Pitch Lines
-                            p5.strokeWeight(1);
-                            for (let i = -90; i <= 90; i += 10) {
-                                let y = i * 2; // Scale pitch to canvas
-                                if (i !== 0) {
-                                    p5.line(-20, y, 20, y);
-                                    p5.textSize(12);
-                                    p5.fill(255);
-                                    p5.noStroke();
-                                    p5.text(`${i}°`, 30, y + 4);
-                                }
-                            }
+                    // Rotate for roll
+                    ctx.rotate(roll * Math.PI / 180);
 
-                            p5.pop();
+                    // Horizon Line (white arc)
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(0, -pitchOffset, horizonRadius, 0, Math.PI * 2);
+                    ctx.stroke();
 
-                            // Display Roll and Pitch
-                            p5.fill(0, 255, 255);
-                            p5.textSize(16);
-                            p5.textAlign(p5.LEFT);
-                            p5.text(`Roll: ${roll.toFixed(1)}°`, 10, 360);
-                            p5.text(`Pitch: ${pitch.toFixed(1)}°`, 10, 380);
-                            p5.textAlign(p5.CENTER);
-                            p5.text(`TARGET: ${selectedValue || 'NONE'}`, 200, 390);
-                        };
-                    };
+                    // Pitch Lines (inside the circle)
+                    ctx.lineWidth = 1;
+                    for (let i = -90; i <= 90; i += 10) {
+                        const angle = (i / 90) * Math.PI / 2; // Convert to radians
+                        const y = -pitchOffset + Math.sin(angle) * (horizonRadius * 0.7); // Adjusted radius for inner lines
+                        const x = Math.cos(angle) * (horizonRadius * 0.7);
+                        if (i !== 0) {
+                            ctx.beginPath();
+                            ctx.moveTo(-10, y);
+                            ctx.lineTo(10, y);
+                            ctx.stroke();
+                            ctx.fillStyle = '#ffffff';
+                            ctx.font = '12px monospace';
+                            ctx.save();
+                            ctx.translate(x, y);
+                            ctx.rotate(-roll * Math.PI / 180); // Counter-rotate for text
+                            ctx.fillText(`${i}°`, 15, 4);
+                            ctx.restore();
+                        }
+                    }
 
-                    p5Ref.current = new p5(sketch);
-                }
+                    ctx.restore();
+
+                    // Display Roll and Pitch
+                    ctx.fillStyle = 'rgb(0, 255, 255)';
+                    ctx.font = '16px monospace';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(`Roll: ${roll.toFixed(1)}°`, 10, 360);
+                    ctx.fillText(`Pitch: ${pitch.toFixed(1)}°`, 10, 380);
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`TARGET: ${selectedValue || 'NONE'}`, 200, 390);
+
+                    animationFrameId = requestAnimationFrame(animate);
+                };
+
+                animate();
 
                 return () => {
-                    if (p5Ref.current) {
-                        p5Ref.current.remove();
-                        p5Ref.current = null;
-                    }
+                    if (animationFrameId) cancelAnimationFrame(animationFrameId);
                 };
             }, [selectedType, selectedValue]);
 
             return (
                 <div className="bg-gray-900 p-6 futuristic-border h-[450px] flex flex-col justify-center items-center scan-effect">
                     <h2 className="text-xl font-bold mb-4 text-[#00FFFF]">SIMULATION GRID</h2>
-                    <div ref={canvasRef} className="w-[400px] h-[400px]"></div>
+                    <canvas ref={canvasRef} width="400" height="400" className="w-[400px] h-[400px]"></canvas>
                 </div>
             );
         }
@@ -245,6 +267,10 @@
             React.useEffect(() => {
                 require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.0/min/vs' } });
                 require(['vs/editor/editor.main'], function() {
+                    if (!window.monaco) {
+                        console.error('Monaco Editor failed to load');
+                        return;
+                    }
                     editorRef.current = monaco.editor.create(document.getElementById('editor'), {
                         value: editorContent,
                         language: 'python',
@@ -258,15 +284,17 @@
                     editorRef.current.onDidChangeModelContent(() => {
                         setEditorContent(editorRef.current.getValue());
                     });
+                }, (err) => {
+                    console.error('Error loading Monaco Editor:', err);
                 });
-            }, []);
+            }, [editorContent]);
 
             const handleSelect = (type, value) => {
-                const key = type === 'controller' ? value : 
-                           type === 'filter' ? value : value;
-                setEditorContent(codeSnippets[key] || `# [ERROR 404] NO CODE DETECTED FOR ${key}\n# DEPLOY CUSTOM PROTOCOL HERE`);
+                const key = type === 'controller' ? value : type === 'filter' ? value : value;
+                const newContent = codeSnippets[key] || `# [ERROR 404] NO CODE DETECTED FOR ${key}\n# DEPLOY CUSTOM PROTOCOL HERE`;
+                setEditorContent(newContent);
                 if (editorRef.current) {
-                    editorRef.current.setValue(codeSnippets[key] || `# [ERROR 404] NO CODE DETECTED FOR ${key}\n# DEPLOY CUSTOM PROTOCOL HERE`);
+                    editorRef.current.setValue(newContent);
                 }
                 setSelectedType(type);
                 setSelectedValue(value);
@@ -275,11 +303,13 @@
             const uploadCode = async () => {
                 setStatus('Uploading...');
                 try {
-                    const response = await axios.post('http://192.168.4.1:8080/upload', editorContent);
+                    const response = await axios.post('http://192.168.4.1:8080/upload', editorContent, {
+                        timeout: 5000, // 5-second timeout
+                    });
                     setStatus('Code uploaded');
-                    setTimeout(() => setStatus('Ready'), 2000);
                 } catch (error) {
-                    setStatus(`Error: ${error.message}`);
+                    setStatus(`Error: ${error.message || 'Network issue or server unavailable'}`);
+                } finally {
                     setTimeout(() => setStatus('Ready'), 2000);
                 }
             };
