@@ -94,7 +94,7 @@
 
         // Algorithm Section
         function AlgorithmSection({ onSelect }) {
-            const algorithms = ['A* Algorithm', 'Dijkstra’s Algorithm'];
+            const algorithms = ['A* Algorithm', 'Dijkstra's Algorithm'];
             return (
                 <div className="bg-gray-900 p-6 futuristic-border h-[150px] flex flex-col justify-center animate-[pulse_2s_infinite]">
                     <h2 className="text-xl font-bold mb-4 text-[#00FF00]">ALGO MODULE</h2>
@@ -143,81 +143,93 @@
 
         // Simulation Window with Artificial Horizon
         function SimulationWindow({ selectedType, selectedValue }) {
-            const setup = (p5, canvasParentRef) => {
-                p5.createCanvas(400, 400).parent(canvasParentRef);
-                p5.angleMode(p5.DEGREES);
-            };
+            const canvasRef = React.useRef(null);
+            const p5Ref = React.useRef(null);
 
-            const draw = (p5) => {
-                p5.background(50);
+            React.useEffect(() => {
+                if (canvasRef.current && !p5Ref.current) {
+                    const sketch = (p5) => {
+                        p5.setup = () => {
+                            p5.createCanvas(400, 400).parent(canvasRef.current);
+                            p5.angleMode(p5.DEGREES);
+                        };
 
-                // Calculate roll and pitch
-                let roll = 0;
-                let pitch = 0;
-                if (selectedType === 'controller' && selectedValue === 'PID Controller') {
-                    roll = p5.sin(p5.frameCount * 2) * 30; // -30° to 30°
-                    pitch = p5.cos(p5.frameCount * 2) * 20; // -20° to 20°
-                } else if (selectedType === 'algorithm' && selectedValue === 'A* Algorithm') {
-                    roll = p5.sin(p5.frameCount * 1.5) * 45; // -45° to 45°
-                    pitch = p5.sin(p5.frameCount * 1) * 60; // -60° to 60°
+                        p5.draw = () => {
+                            p5.background(50);
+
+                            // Calculate roll and pitch
+                            let roll = 0;
+                            let pitch = 0;
+                            if (selectedType === 'controller' && selectedValue === 'PID Controller') {
+                                roll = p5.sin(p5.frameCount * 2) * 30; // -30° to 30°
+                                pitch = p5.cos(p5.frameCount * 2) * 20; // -20° to 20°
+                            } else if (selectedType === 'algorithm' && selectedValue === 'A* Algorithm') {
+                                roll = p5.sin(p5.frameCount * 1.5) * 45; // -45° to 45°
+                                pitch = p5.sin(p5.frameCount * 1) * 60; // -60° to 60°
+                            }
+
+                            // Artificial Horizon
+                            p5.push();
+                            p5.translate(p5.width / 2, p5.height / 2);
+
+                            // Sky (Blue)
+                            p5.fill(0, 191, 255);
+                            p5.noStroke();
+                            p5.rect(-200, -200 - pitch, 400, 200 + pitch);
+
+                            // Ground (Brown)
+                            p5.fill(139, 69, 19);
+                            p5.rect(-200, -pitch, 400, 200 + pitch);
+
+                            // Rotate for roll
+                            p5.rotate(roll);
+
+                            // Horizon Line
+                            p5.stroke(255);
+                            p5.strokeWeight(2);
+                            p5.line(-200, 0, 200, 0);
+
+                            // Pitch Lines
+                            p5.strokeWeight(1);
+                            for (let i = -90; i <= 90; i += 10) {
+                                let y = i * 2; // Scale pitch to canvas
+                                if (i !== 0) {
+                                    p5.line(-20, y, 20, y);
+                                    p5.textSize(12);
+                                    p5.fill(255);
+                                    p5.noStroke();
+                                    p5.text(`${i}°`, 30, y + 4);
+                                }
+                            }
+
+                            p5.pop();
+
+                            // Display Roll and Pitch
+                            p5.fill(0, 255, 255);
+                            p5.textSize(16);
+                            p5.textAlign(p5.LEFT);
+                            p5.text(`Roll: ${roll.toFixed(1)}°`, 10, 360);
+                            p5.text(`Pitch: ${pitch.toFixed(1)}°`, 10, 380);
+                            p5.textAlign(p5.CENTER);
+                            p5.text(`TARGET: ${selectedValue || 'NONE'}`, 200, 390);
+                        };
+                    };
+
+                    p5Ref.current = new p5(sketch);
                 }
 
-                // Artificial Horizon
-                p5.push();
-                p5.translate(p5.width / 2, p5.height / 2);
-
-                // Sky (Blue)
-                p5.fill(0, 191, 255);
-                p5.noStroke();
-                p5.rect(-200, -200 - pitch, 400, 200 + pitch);
-
-                // Ground (Brown)
-                p5.fill(139, 69, 19);
-                p5.rect(-200, -pitch, 400, 200 + pitch);
-
-                // Rotate for roll
-                p5.rotate(roll);
-
-                // Horizon Line
-                p5.stroke(255);
-                p5.strokeWeight(2);
-                p5.line(-200, 0, 200, 0);
-
-                // Pitch Lines
-                p5.strokeWeight(1);
-                for (let i = -90; i <= 90; i += 10) {
-                    let y = i * 2; // Scale pitch to canvas
-                    if (i !== 0) {
-                        p5.line(-20, y, 20, y);
-                        p5.textSize(12);
-                        p5.fill(255);
-                        p5.noStroke();
-                        p5.text(`${i}°`, 30, y + 4);
+                return () => {
+                    if (p5Ref.current) {
+                        p5Ref.current.remove();
+                        p5Ref.current = null;
                     }
-                }
-
-                p5.pop();
-
-                // Display Roll and Pitch
-                p5.fill(0, 255, 255);
-                p5.textSize(16);
-                p5.textAlign(p5.LEFT);
-                p5.text(`Roll: ${roll.toFixed(1)}°`, 10, 380);
-                p5.text(`Pitch: ${pitch.toFixed(1)}°`, 10, 360);
-                p5.textAlign(p5.CENTER);
-                p5.text(`TARGET: ${selectedValue || 'NONE'}`, 200, 390);
-            };
+                };
+            }, [selectedType, selectedValue]);
 
             return (
                 <div className="bg-gray-900 p-6 futuristic-border h-[450px] flex flex-col justify-center items-center scan-effect">
                     <h2 className="text-xl font-bold mb-4 text-[#00FFFF]">SIMULATION GRID</h2>
-                    <div id="simulation-canvas" className="w-[400px] h-[400px]"></div>
-                    <script type="text/babel">
-                        new p5((p5) => {{
-                            p5.setup = () => {setup(p5, document.getElementById('simulation-canvas'));};
-                            p5.draw = () => {draw(p5);};
-                        }}, document.getElementById('simulation-canvas'));
-                    </script>
+                    <div ref={canvasRef} className="w-[400px] h-[400px]"></div>
                 </div>
             );
         }
