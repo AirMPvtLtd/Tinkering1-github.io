@@ -149,7 +149,7 @@
         }
 
         // Simulation Window with Circular Artificial Horizon
-        function SimulationWindow({ selectedType, selectedValue }) {
+        function SimulationWindow({ selectedType, selectedValue, isSimulating, setIsSimulating }) {
             const canvasRef = React.useRef(null);
 
             React.useEffect(() => {
@@ -160,21 +160,9 @@
                 const radius = canvas.width / 2; // Diameter is 400px, radius is 200px
                 let animationFrameId;
 
-                const animate = () => {
+                const drawHorizon = (roll = 0, pitch = 0) => {
                     // Clear canvas
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                    // Calculate roll and pitch
-                    let roll = 0;
-                    let pitch = 0;
-                    const time = Date.now() * 0.001; // Use time for smooth animation
-                    if (selectedType === 'controller' && selectedValue === 'PID Controller') {
-                        roll = Math.sin(time * 2) * 30; // -30° to 30°
-                        pitch = Math.cos(time * 2) * 20; // -20° to 20°
-                    } else if (selectedType === 'algorithm' && selectedValue === 'A* Algorithm') {
-                        roll = Math.sin(time * 1.5) * 45; // -45° to 45°
-                        pitch = Math.sin(time * 1) * 60; // -60° to 60°
-                    }
 
                     // Translate to center
                     ctx.save();
@@ -206,12 +194,13 @@
                     ctx.arc(0, -pitchOffset, horizonRadius, 0, Math.PI * 2);
                     ctx.stroke();
 
-                    // Pitch Lines (inside the circle)
+                    // Pitch Lines (inside the circle) with 90° left rotation
                     ctx.lineWidth = 1;
                     for (let i = -90; i <= 90; i += 10) {
-                        const angle = (i / 90) * Math.PI / 2; // Convert to radians
-                        const y = -pitchOffset + Math.sin(angle) * (horizonRadius * 0.7); // Adjusted radius for inner lines
-                        const x = Math.cos(angle) * (horizonRadius * 0.7);
+                        const baseAngle = (i / 90) * Math.PI / 2; // Original angle in radians
+                        const rotatedAngle = baseAngle - Math.PI / 2; // Rotate 90° left (counterclockwise)
+                        const y = -pitchOffset + Math.sin(rotatedAngle) * (horizonRadius * 0.7); // Adjusted radius for inner lines
+                        const x = Math.cos(rotatedAngle) * (horizonRadius * 0.7);
                         if (i !== 0) {
                             ctx.beginPath();
                             ctx.moveTo(-10, y);
@@ -221,7 +210,7 @@
                             ctx.font = '12px monospace';
                             ctx.save();
                             ctx.translate(x, y);
-                            ctx.rotate(-roll * Math.PI / 180); // Counter-rotate for text
+                            ctx.rotate(-roll * Math.PI / 180 - Math.PI / 2); // Counter-rotate for text with 90° offset
                             ctx.fillText(`${i}°`, 15, 4);
                             ctx.restore();
                         }
@@ -237,16 +226,34 @@
                     ctx.fillText(`Pitch: ${pitch.toFixed(1)}°`, 10, 380);
                     ctx.textAlign = 'center';
                     ctx.fillText(`TARGET: ${selectedValue || 'NONE'}`, 200, 390);
-
-                    animationFrameId = requestAnimationFrame(animate);
                 };
 
-                animate();
+                // Draw initial neutral horizon
+                drawHorizon(0, 0);
+
+                // Start animation if simulating
+                if (isSimulating) {
+                    const animate = () => {
+                        let roll = 0;
+                        let pitch = 0;
+                        const time = Date.now() * 0.001; // Use time for smooth animation
+                        if (selectedType === 'controller' && selectedValue === 'PID Controller') {
+                            roll = Math.sin(time * 2) * 30; // -30° to 30°
+                            pitch = Math.cos(time * 2) * 20; // -20° to 20°
+                        } else if (selectedType === 'algorithm' && selectedValue === 'A* Algorithm') {
+                            roll = Math.sin(time * 1.5) * 45; // -45° to 45°
+                            pitch = Math.sin(time * 1) * 60; // -60° to 60°
+                        }
+                        drawHorizon(roll, pitch);
+                        animationFrameId = requestAnimationFrame(animate);
+                    };
+                    animate();
+                }
 
                 return () => {
                     if (animationFrameId) cancelAnimationFrame(animationFrameId);
                 };
-            }, [selectedType, selectedValue]);
+            }, [selectedType, selectedValue, isSimulating]);
 
             return (
                 <div className="bg-gray-900 p-6 futuristic-border h-[450px] flex flex-col justify-center items-center scan-effect">
@@ -263,6 +270,7 @@
             const [selectedType, setSelectedType] = React.useState('controller');
             const [selectedValue, setSelectedValue] = React.useState('PID Controller');
             const editorRef = React.useRef(null);
+            const [isSimulating, setIsSimulating] = React.useState(false);
 
             React.useEffect(() => {
                 require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.0/min/vs' } });
@@ -314,6 +322,10 @@
                 }
             };
 
+            const startSimulation = () => {
+                setIsSimulating(true);
+            };
+
             return (
                 <div className="container mx-auto p-6">
                     <h1 className="text-4xl font-bold text-center mb-8 text-[#00FFFF] tracking-wider animate-[pulse_3s_infinite]">
@@ -327,12 +339,21 @@
                             <ControllerSection onSelect={handleSelect} />
                             <FilterSection onSelect={handleSelect} />
                             <AlgorithmSection onSelect={handleSelect} />
-                            <SimulationWindow selectedType={selectedType} selectedValue={selectedValue} />
+                            <SimulationWindow 
+                                selectedType={selectedType} 
+                                selectedValue={selectedValue} 
+                                isSimulating={isSimulating} 
+                                setIsSimulating={setIsSimulating} 
+                            />
                         </div>
                     </div>
                     <div className="flex justify-center gap-6 mt-6">
                         <AnimationWindow status={status} />
-                        <div className="flex items-center">
+                        <div className="flex items-center gap-4">
+                            <button onClick={startSimulation}
+                                className="bg-[#00FF00] hover:bg-[#00CC00] text-black font-bold py-3 px-6 rounded-lg futuristic-border animate-[pulse_2s_infinite]">
+                                SIMULATE
+                            </button>
                             <button onClick={uploadCode}
                                 className="bg-[#00FF00] hover:bg-[#00CC00] text-black font-bold py-3 px-6 rounded-lg futuristic-border animate-[pulse_2s_infinite]">
                                 DEPLOY PROTOCOL
