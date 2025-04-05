@@ -63,6 +63,45 @@
             @apply bg-[#00FF00] text-black;
             box-shadow: 0 0 20px #00FF00;
         }
+        .gamepad {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            width: fit-content;
+            margin: 20px auto 0;
+        }
+        .gamepad-row {
+            display: flex;
+            gap: 10px;
+        }
+        .gamepad-button {
+            @apply bg-gray-700 text-[#00FFFF] border border-[#00FF00] p-4 rounded-lg transition-all duration-300;
+            box-shadow: 0 0 5px #00FFFF;
+            cursor: pointer;
+            font-size: 16px;
+            min-width: 80px;
+            text-align: center;
+        }
+        .gamepad-button:hover {
+            @apply bg-[#00FF00] text-black;
+            box-shadow: 0 0 15px #00FF00;
+        }
+        .dpad {
+            display: grid;
+            grid-template-areas:
+                "up up up"
+                "left down right"
+                "empty empty empty";
+            gap: 5px;
+        }
+        .dpad .up { grid-area: up; }
+        .dpad .left { grid-area: left; }
+        .dpad .down { grid-area: down; }
+        .dpad .right { grid-area: right; }
     </style>
 </head>
 <body class="bg-gray-800 text-white font-mono">
@@ -461,13 +500,13 @@ while True:
         // Animation Window
         function AnimationWindow({ status }) {
             let animation = null;
-            if (status === 'Uploading...' || status === 'Compiling...' || status === 'Loading Pyodide...' || status === 'Checking Drone...') {
+            if (status === 'Uploading...' || status === 'Compiling...' || status === 'Loading Pyodide...' || status === 'Checking Drone...' || status === 'Creating Simulation...') {
                 animation = (
                     <div className="flex justify-center items-center h-full">
                         <div className="w-12 h-12 border-4 border-[#00FFFF] border-t-transparent rounded-full animate-[spin_1s_linear_infinite]"></div>
                     </div>
                 );
-            } else if (status === 'Code uploaded') {
+            } else if (status === 'Code uploaded' || status === 'Simulation Created') {
                 animation = (
                     <div className="flex justify-center items-center h-full">
                         <svg className="w-12 h-12 text-[#00FF00] animate-[pulse_1s_ease-in-out_infinite]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -493,8 +532,8 @@ while True:
             );
         }
 
-        // Simulation Window with Circular Artificial Horizon
-        function SimulationWindow({ selectedType, selectedValue, isSimulating, setIsSimulating }) {
+        // Simulation Window with Circular Artificial Horizon and Gamepad Controls
+        function SimulationWindow({ selectedType, selectedValue, isSimulating, setIsSimulating, angles, setAngles, height, setHeight }) {
             const canvasRef = React.useRef(null);
 
             React.useEffect(() => {
@@ -507,7 +546,7 @@ while True:
                 const radius = canvas.width / 2;
                 let animationFrameId;
 
-                const drawHorizon = (roll = 0, pitch = 0) => {
+                const drawHorizon = (roll = 0, pitch = 0, yaw = 0) => {
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                     ctx.strokeStyle = '#ffffff';
@@ -519,24 +558,25 @@ while True:
                     ctx.save();
                     ctx.translate(centerX, centerY);
                     ctx.rotate(roll * Math.PI / 180);
+                    // Tilt the horizon based on pitch around the center
+                    ctx.rotate(pitch * Math.PI / 180);
 
                     const horizonRadius = radius * 0.7;
-                    const pitchOffset = (pitch / 90) * (horizonRadius * 0.5);
 
                     ctx.fillStyle = 'rgb(0, 191, 255)';
                     ctx.beginPath();
-                    ctx.arc(0, -pitchOffset, horizonRadius, 0, Math.PI, true);
+                    ctx.arc(0, 0, horizonRadius, 0, Math.PI, true);
                     ctx.fill();
 
                     ctx.fillStyle = 'rgb(139, 69, 19)';
                     ctx.beginPath();
-                    ctx.arc(0, -pitchOffset, horizonRadius, 0, Math.PI, false);
+                    ctx.arc(0, 0, horizonRadius, 0, Math.PI, false);
                     ctx.fill();
 
                     ctx.strokeStyle = '#ffffff';
                     ctx.lineWidth = 1;
                     ctx.beginPath();
-                    ctx.arc(0, -pitchOffset, horizonRadius, 0, Math.PI * 2);
+                    ctx.arc(0, 0, horizonRadius, 0, Math.PI * 2);
                     ctx.stroke();
 
                     ctx.lineWidth = 1;
@@ -544,7 +584,7 @@ while True:
                         const baseAngle = (i / 90) * Math.PI / 2;
                         const rotatedAngle = baseAngle - Math.PI / 2;
                         const lineRadius = horizonRadius * 0.6;
-                        const y = -pitchOffset + Math.sin(rotatedAngle) * lineRadius;
+                        const y = Math.sin(rotatedAngle) * lineRadius;
                         const x = Math.cos(rotatedAngle) * lineRadius;
                         if (i !== 0) {
                             ctx.beginPath();
@@ -555,7 +595,7 @@ while True:
                             ctx.font = '10px monospace';
                             ctx.save();
                             ctx.translate(x, y);
-                            ctx.rotate(-roll * Math.PI / 180 - Math.PI / 2);
+                            ctx.rotate(-roll * Math.PI / 180 - pitch * Math.PI / 180 - Math.PI / 2);
                             ctx.fillText(`${i}°`, 10, 2);
                             ctx.restore();
                         }
@@ -569,19 +609,15 @@ while True:
                     ctx.fillText(`TARGET: ${selectedValue || 'NONE'}`, centerX, centerY - radius * 0.8 - 20);
                     ctx.fillText(`Roll: ${roll.toFixed(1)}°`, centerX, centerY + radius * 0.8 + 20);
                     ctx.fillText(`Pitch: ${pitch.toFixed(1)}°`, centerX, centerY + radius * 0.8 + 40);
+                    ctx.fillText(`Height: ${height} meters`, centerX, centerY + radius * 0.8 + 60); // Display height with "meters" and update value
+                    ctx.fillText(`Yaw: ${yaw.toFixed(1)}°`, centerX, centerY + radius * 0.8 + 80);
                 };
 
-                drawHorizon(0, 0);
+                drawHorizon(angles[0], angles[1], angles[2]);
 
                 if (isSimulating) {
                     const animate = () => {
-                        let roll = 0, pitch = 0;
-                        const time = Date.now() * 0.001;
-                        if (selectedType === 'controller' && selectedValue === 'PID Controller') {
-                            roll = Math.sin(time * 2) * 30;
-                            pitch = Math.cos(time * 2) * 20;
-                        }
-                        drawHorizon(roll, pitch);
+                        drawHorizon(angles[0], angles[1], angles[2]);
                         animationFrameId = requestAnimationFrame(animate);
                     };
                     animate();
@@ -590,12 +626,41 @@ while True:
                 return () => {
                     if (animationFrameId) cancelAnimationFrame(animationFrameId);
                 };
-            }, [selectedType, selectedValue, isSimulating]);
+            }, [angles, selectedValue, isSimulating, height]);
+
+            const handleControl = (command) => {
+                const step = 1; // Smaller step for height increment/decrement
+                let newAngles = [...angles];
+                let newHeight = height;
+                switch (command) {
+                    case 'Up': newHeight = Math.min(newHeight + step, 100); break;
+                    case 'Down': newHeight = Math.max(newHeight - step, 0); break;
+                    case 'Forward': newAngles[1] = Math.min(newAngles[1] + step, 45); break;
+                    case 'Backward': newAngles[1] = Math.max(newAngles[1] - step, -45); break;
+                    case 'Left': newAngles[0] = Math.max(newAngles[0] - step, -45); break;
+                    case 'Right': newAngles[0] = Math.min(newAngles[0] + step, 45); break;
+                }
+                setAngles(newAngles);
+                setHeight(newHeight);
+                console.log(`Control activated: ${command}, New Angles: ${newAngles}, New Height: ${newHeight}`); // Debug log
+            };
 
             return (
-                <div className="bg-gray-900 p-6 futuristic-border h-[450px] flex flex-col justify-center items-center scan-effect">
+                <div className="bg-gray-900 p-6 futuristic-border h-[700px] flex flex-col justify-between items-center scan-effect">
                     <h2 className="text-xl font-bold mb-4 text-[#00FFFF]">SIMULATION GRID</h2>
                     <canvas ref={canvasRef} width="400" height="400" className="w-[400px] h-[400px]"></canvas>
+                    <div className="gamepad">
+                        <div className="dpad">
+                            <button onClick={() => handleControl('Up')} className="gamepad-button up">Up (Height +)</button>
+                            <button onClick={() => handleControl('Left')} className="gamepad-button left">Left (Roll -)</button>
+                            <button onClick={() => handleControl('Down')} className="gamepad-button down">Down (Height -)</button>
+                            <button onClick={() => handleControl('Right')} className="gamepad-button right">Right (Roll +)</button>
+                        </div>
+                        <div className="gamepad-row">
+                            <button onClick={() => handleControl('Forward')} className="gamepad-button">Forward (Pitch +)</button>
+                            <button onClick={() => handleControl('Backward')} className="gamepad-button">Backward (Pitch -)</button>
+                        </div>
+                    </div>
                 </div>
             );
         }
@@ -609,6 +674,8 @@ while True:
             const [compileOutput, setCompileOutput] = React.useState('');
             const [isSimulating, setIsSimulating] = React.useState(false);
             const [activeTab, setActiveTab] = React.useState('Imports');
+            const [angles, setAngles] = React.useState([0, 0, 0]);
+            const [height, setHeight] = React.useState(0); // Initial height set to 0
             const editorRef = React.useRef(null);
             const [pyodide, setPyodide] = React.useState(null);
             const [retryCount, setRetryCount] = React.useState(0);
@@ -695,7 +762,6 @@ while True:
 
             const handleTabChange = (tab) => {
                 setActiveTab(tab);
-                // Append new code block instead of replacing
                 const currentContent = editorContent || '';
                 const newContent = codeBlocks[tab];
                 if (!currentContent.includes(newContent)) {
@@ -709,7 +775,6 @@ while True:
             const uploadCode = async () => {
                 setStatus('Uploading...');
                 try {
-                    // Combine all code blocks into one
                     const fullCode = Object.values(codeBlocks).join('\n\n');
                     const response = await axios.post('http://192.168.4.1:8080/upload', fullCode, {
                         timeout: 5000,
@@ -727,18 +792,42 @@ while True:
                     setCompileOutput('Error: Pyodide not loaded yet. Please wait or check console.');
                     return;
                 }
-
                 setStatus('Compiling...');
                 setCompileOutput('');
                 try {
-                    // Combine all code blocks into one
-                    const fullCode = Object.values(codeBlocks).join('\n\n');
-                    const output = await pyodide.runPythonAsync(fullCode);
-                    setCompileOutput(output || 'Compiled successfully (no output)');
+                    const fullCode = editorContent || Object.values(codeBlocks).join('\n\n');
+                    await pyodide.runPythonAsync(fullCode);
+                    setCompileOutput('Compiled successfully');
                 } catch (error) {
                     setCompileOutput(`Error: ${error.message}`);
                 } finally {
                     setTimeout(() => setStatus('Drone server detected'), 2000);
+                }
+            };
+
+            const createSimulation = async () => {
+                if (!pyodide || compileOutput.startsWith('Error')) {
+                    setStatus('Error: Compile code first without errors');
+                    return;
+                }
+                setStatus('Creating Simulation...');
+                try {
+                    const fullCode = editorContent || Object.values(codeBlocks).join('\n\n');
+                    const simulatedAngles = await pyodide.runPythonAsync(`
+from js import angles, setAngles, height, setHeight
+import random
+# Simulate angles based on the code (simplified example)
+roll = angles[0]
+pitch = angles[1]
+yaw = angles[2]
+new_height = height + random.uniform(-1, 1)
+setAngles([roll + random.uniform(-1, 1), pitch + random.uniform(-1, 1), yaw + random.uniform(-1, 1)])
+setHeight(max(0, min(100, new_height)))
+                    `);
+                    setAngles(simulatedAngles);
+                    setStatus('Simulation Created');
+                } catch (error) {
+                    setStatus(`Error: ${error.message || 'Simulation creation failed'}`);
                 }
             };
 
@@ -754,11 +843,16 @@ while True:
                     <div className="flex flex-col md:flex-row gap-6">
                         <div className="md:w-2/3">
                             <div id="editor" className="h-[800px] futuristic-border rounded-lg scan-effect"></div>
-                            <div className="mt-4 p-4 bg-gray-700 rounded-lg">
+                            <div className="mt-4 p-4 bg-gray-700 rounded-lg flex gap-2">
                                 <button onClick={compileCode}
                                     className="bg-[#00FF00] hover:bg-[#00CC00] text-black font-bold py-2 px-4 rounded-lg futuristic-border animate-[pulse_2s_infinite]"
                                     disabled={!pyodide}>
                                     COMPILE
+                                </button>
+                                <button onClick={createSimulation}
+                                    className="bg-[#00FF00] hover:bg-[#00CC00] text-black font-bold py-2 px-4 rounded-lg futuristic-border animate-[pulse_2s_infinite]"
+                                    disabled={!pyodide || compileOutput.startsWith('Error')}>
+                                    CREATE SIMULATION
                                 </button>
                                 <pre className="mt-2 text-[#00FFFF] whitespace-pre-wrap">{compileOutput}</pre>
                             </div>
@@ -770,6 +864,10 @@ while True:
                                 selectedValue={selectedValue}
                                 isSimulating={isSimulating}
                                 setIsSimulating={setIsSimulating}
+                                angles={angles}
+                                setAngles={setAngles}
+                                height={height}
+                                setHeight={setHeight}
                             />
                         </div>
                     </div>
@@ -777,7 +875,8 @@ while True:
                         <AnimationWindow status={status} />
                         <div className="flex items-center gap-4">
                             <button onClick={startSimulation}
-                                className="bg-[#00FF00] hover:bg-[#00CC00] text-black font-bold py-3 px-6 rounded-lg futuristic-border animate-[pulse_2s_infinite]">
+                                className="bg-[#00FF00] hover:bg-[#00CC00] text-black font-bold py-3 px-6 rounded-lg futuristic-border animate-[pulse_2s_infinite]"
+                                disabled={!pyodide || compileOutput.startsWith('Error')}>
                                 SIMULATE
                             </button>
                             <button onClick={uploadCode}
@@ -789,6 +888,18 @@ while True:
                 </div>
             );
         }
+
+        // Expose setAngles and setHeight for Pyodide
+        window.setAngles = (newAngles) => {
+            const root = ReactDOM.createRoot(document.getElementById('root'));
+            root.render(<App />);
+        };
+        window.setHeight = (newHeight) => {
+            const root = ReactDOM.createRoot(document.getElementById('root'));
+            root.render(<App />);
+        };
+        window.angles = [0, 0, 0];
+        window.height = 0;
 
         // Render
         const root = ReactDOM.createRoot(document.getElementById('root'));
