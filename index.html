@@ -157,6 +157,8 @@
                 if (!canvas) return;
 
                 const ctx = canvas.getContext('2d');
+                const centerX = canvas.width / 2; // 200
+                const centerY = canvas.height / 2; // 200
                 const radius = canvas.width / 2; // Diameter is 400px, radius is 200px
                 let animationFrameId;
 
@@ -164,12 +166,22 @@
                     // Clear canvas
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-                    // Translate to center
-                    ctx.save();
-                    ctx.translate(canvas.width / 2, canvas.height / 2);
+                    // Draw fixed outer circle
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, radius * 0.8, 0, Math.PI * 2);
+                    ctx.stroke();
 
-                    // Draw circular horizon
-                    const horizonRadius = radius * 0.8; // Slightly smaller circle for horizon effect
+                    // Translate to center for inner rotation
+                    ctx.save();
+                    ctx.translate(centerX, centerY);
+
+                    // Rotate based on roll
+                    ctx.rotate(roll * Math.PI / 180);
+
+                    // Inner horizon with pitch offset
+                    const horizonRadius = radius * 0.7; // Reduced to ensure everything stays inside
                     const pitchOffset = (pitch / 90) * (horizonRadius * 0.5); // Scale pitch to fit circle
 
                     // Sky (Blue) - Upper half of circle
@@ -184,12 +196,9 @@
                     ctx.arc(0, -pitchOffset, horizonRadius, 0, Math.PI, false);
                     ctx.fill();
 
-                    // Rotate for roll
-                    ctx.rotate(roll * Math.PI / 180);
-
-                    // Horizon Line (white arc)
+                    // Horizon Line (white arc) inside
                     ctx.strokeStyle = '#ffffff';
-                    ctx.lineWidth = 2;
+                    ctx.lineWidth = 1;
                     ctx.beginPath();
                     ctx.arc(0, -pitchOffset, horizonRadius, 0, Math.PI * 2);
                     ctx.stroke();
@@ -199,33 +208,35 @@
                     for (let i = -90; i <= 90; i += 10) {
                         const baseAngle = (i / 90) * Math.PI / 2; // Original angle in radians
                         const rotatedAngle = baseAngle - Math.PI / 2; // Rotate 90° left (counterclockwise)
-                        const y = -pitchOffset + Math.sin(rotatedAngle) * (horizonRadius * 0.7); // Adjusted radius for inner lines
-                        const x = Math.cos(rotatedAngle) * (horizonRadius * 0.7);
+                        const lineRadius = horizonRadius * 0.6; // Further reduced to stay inside
+                        const y = -pitchOffset + Math.sin(rotatedAngle) * lineRadius;
+                        const x = Math.cos(rotatedAngle) * lineRadius;
                         if (i !== 0) {
                             ctx.beginPath();
-                            ctx.moveTo(-10, y);
-                            ctx.lineTo(10, y);
+                            ctx.moveTo(-5, y);
+                            ctx.lineTo(5, y);
                             ctx.stroke();
                             ctx.fillStyle = '#ffffff';
-                            ctx.font = '12px monospace';
+                            ctx.font = '10px monospace'; // Smaller font to fit
                             ctx.save();
                             ctx.translate(x, y);
                             ctx.rotate(-roll * Math.PI / 180 - Math.PI / 2); // Counter-rotate for text with 90° offset
-                            ctx.fillText(`${i}°`, 15, 4);
+                            ctx.fillText(`${i}°`, 10, 2); // Adjusted position
                             ctx.restore();
                         }
                     }
 
                     ctx.restore();
 
-                    // Display Roll and Pitch
+                    // Display Target above horizon
                     ctx.fillStyle = 'rgb(0, 255, 255)';
                     ctx.font = '16px monospace';
-                    ctx.textAlign = 'left';
-                    ctx.fillText(`Roll: ${roll.toFixed(1)}°`, 10, 360);
-                    ctx.fillText(`Pitch: ${pitch.toFixed(1)}°`, 10, 380);
                     ctx.textAlign = 'center';
-                    ctx.fillText(`TARGET: ${selectedValue || 'NONE'}`, 200, 390);
+                    ctx.fillText(`TARGET: ${selectedValue || 'NONE'}`, centerX, centerY - radius * 0.8 - 20);
+
+                    // Display Roll and Pitch below horizon
+                    ctx.fillText(`Roll: ${roll.toFixed(1)}°`, centerX, centerY + radius * 0.8 + 20);
+                    ctx.fillText(`Pitch: ${pitch.toFixed(1)}°`, centerX, centerY + radius * 0.8 + 40);
                 };
 
                 // Draw initial neutral horizon
