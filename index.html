@@ -14,6 +14,8 @@
     <script src="https://cdn.jsdelivr.net/npm/axios@1.6.7/dist/axios.min.js"></script>
     <!-- Monaco Editor CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.0/min/vs/loader.min.js"></script>
+    <!-- p5.js CDN for Artificial Horizon -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.min.js"></script>
     <style>
         @keyframes spin {
             0% { transform: rotate(0deg); }
@@ -27,13 +29,6 @@
         @keyframes scan {
             0% { background-position: 0 0; }
             100% { background-position: 100% 0; }
-        }
-        @keyframes move {
-            0% { transform: translate(0, 0); }
-            25% { transform: translate(50px, -50px); }
-            50% { transform: translate(100px, 0); }
-            75% { transform: translate(50px, 50px); }
-            100% { transform: translate(0, 0); }
         }
         .futuristic-border {
             border: 2px solid #00FFFF;
@@ -58,23 +53,6 @@
     globals()['prev_error'] = error
     globals()['integral'] = integral
     return kp * error + ki * integral + kd * derivative`,
-            'Linear Quadratic Regulator (LQR)': `# LQR requires a linear model
-def lqr_control(state, A, B, Q, R):
-    # Simplified LQR logic
-    K = compute_lqr_gain(A, B, Q, R)
-    return -K @ state`,
-            'Complementary Filter': `def complementary_filter(accel_data, gyro_data, dt, alpha=0.98):
-    angle = alpha * (angle + gyro_data * dt) + (1 - alpha) * accel_data
-    return angle`,
-            'Kalman Filter (KF)': `def kalman_filter(z, x_est, P, Q, R):
-    # Prediction
-    x_pred = F * x_est
-    P_pred = F * P * F.T + Q
-    # Update
-    K = P_pred * H.T * (H * P_pred * H.T + R)^(-1)
-    x_est = x_pred + K * (z - H * x_pred)
-    P = (I - K * H) * P_pred
-    return x_est`,
             'A* Algorithm': `def a_star(start, goal, graph):
     open_set = {start}
     g_score = {start: 0}
@@ -83,22 +61,12 @@ def lqr_control(state, A, B, Q, R):
         current = min(open_set, key=lambda x: f_score[x])
         if current == goal:
             return reconstruct_path(came_from, current)
-        # A* logic continues...
     return None`,
         };
 
         // Controller Section
         function ControllerSection({ onSelect }) {
-            const controllers = [
-                'PID Controller', 'Linear Quadratic Regulator (LQR)', 'Linear Quadratic Gaussian (LQG)', 
-                'Model Predictive Control (MPC)', 'Feedback Linearization', 'Backstepping Controller', 
-                'Sliding Mode Controller (SMC)', 'H-Infinity Controller', 'Incremental Nonlinear Dynamic Inversion (INDI)', 
-                'Adaptive Control', 'Fuzzy Logic Controller (FLC)', 'Neural Network-Based Controller', 
-                'Reinforcement Learning (RL)', 'Gain Scheduling', 'Proportional (P) Controller', 
-                'Dynamic Inversion', 'Robust Control', 'State Feedback Controller', 
-                'Optimal Control', 'Game Theory-Based Controller'
-            ];
-
+            const controllers = ['PID Controller', 'Linear Quadratic Regulator (LQR)'];
             return (
                 <div className="bg-gray-900 p-6 futuristic-border h-[150px] flex flex-col justify-center animate-[pulse_2s_infinite]">
                     <h2 className="text-xl font-bold mb-4 text-[#00FF00]">CTRL UNIT</h2>
@@ -112,14 +80,7 @@ def lqr_control(state, A, B, Q, R):
 
         // Filter Section
         function FilterSection({ onSelect }) {
-            const filters = [
-                'Kalman Filter (KF)', 'Extended Kalman Filter (EKF)', 'Unscented Kalman Filter (UKF)', 
-                'Complementary Filter', 'Particle Filter (PF)', 'Low-Pass Filter (LPF)', 
-                'High-Pass Filter (HPF)', 'Band-Pass Filter (BPF)', 'Madgwick Filter', 
-                'Mahony Filter', 'Median Filter', 'Butterworth Filter', 
-                'Notch Filter', 'Gaussian Filter', 'Savitzky-Golay Filter'
-            ];
-
+            const filters = ['Kalman Filter (KF)', 'Complementary Filter'];
             return (
                 <div className="bg-gray-900 p-6 futuristic-border h-[150px] flex flex-col justify-center animate-[pulse_2s_infinite]">
                     <h2 className="text-xl font-bold mb-4 text-[#00FF00]">FILTER CORE</h2>
@@ -133,17 +94,7 @@ def lqr_control(state, A, B, Q, R):
 
         // Algorithm Section
         function AlgorithmSection({ onSelect }) {
-            const algorithms = [
-                'PID Tuning (Ziegler-Nichols)', 'A* Algorithm', 'Dijkstra’s Algorithm', 
-                'RRT (Rapidly-exploring Random Tree)', 'SLAM', 'VFH (Vector Field Histogram)', 
-                'Particle Swarm Optimization (PSO)', 'Genetic Algorithm (GA)', 
-                'Ant Colony Optimization (ACO)', 'Q-Learning', 'Deep Q-Network (DQN)', 
-                'Convolutional Neural Networks (CNN)', 'YOLO (You Only Look Once)', 
-                'Faster R-CNN', 'Monte Carlo Localization', 'Graph-Based Path Planning', 
-                'Kalman Smoother', 'Dynamic Programming', 'K-Means Clustering', 
-                'Optical Flow'
-            ];
-
+            const algorithms = ['A* Algorithm', 'Dijkstra’s Algorithm'];
             return (
                 <div className="bg-gray-900 p-6 futuristic-border h-[150px] flex flex-col justify-center animate-[pulse_2s_infinite]">
                     <h2 className="text-xl font-bold mb-4 text-[#00FF00]">ALGO MODULE</h2>
@@ -190,28 +141,83 @@ def lqr_control(state, A, B, Q, R):
             );
         }
 
-        // Simulation Window
+        // Simulation Window with Artificial Horizon
         function SimulationWindow({ selectedType, selectedValue }) {
-            const [position, setPosition] = React.useState({ x: 0, y: 0 });
+            const setup = (p5, canvasParentRef) => {
+                p5.createCanvas(400, 400).parent(canvasParentRef);
+                p5.angleMode(p5.DEGREES);
+            };
 
-            React.useEffect(() => {
+            const draw = (p5) => {
+                p5.background(50);
+
+                // Calculate roll and pitch
+                let roll = 0;
+                let pitch = 0;
                 if (selectedType === 'controller' && selectedValue === 'PID Controller') {
-                    setPosition({ x: 50, y: -50 });
+                    roll = p5.sin(p5.frameCount * 2) * 30; // -30° to 30°
+                    pitch = p5.cos(p5.frameCount * 2) * 20; // -20° to 20°
                 } else if (selectedType === 'algorithm' && selectedValue === 'A* Algorithm') {
-                    setPosition({ x: 100, y: 0 });
-                } else {
-                    setPosition({ x: 0, y: 0 });
+                    roll = p5.sin(p5.frameCount * 1.5) * 45; // -45° to 45°
+                    pitch = p5.sin(p5.frameCount * 1) * 60; // -60° to 60°
                 }
-            }, [selectedType, selectedValue]);
+
+                // Artificial Horizon
+                p5.push();
+                p5.translate(p5.width / 2, p5.height / 2);
+
+                // Sky (Blue)
+                p5.fill(0, 191, 255);
+                p5.noStroke();
+                p5.rect(-200, -200 - pitch, 400, 200 + pitch);
+
+                // Ground (Brown)
+                p5.fill(139, 69, 19);
+                p5.rect(-200, -pitch, 400, 200 + pitch);
+
+                // Rotate for roll
+                p5.rotate(roll);
+
+                // Horizon Line
+                p5.stroke(255);
+                p5.strokeWeight(2);
+                p5.line(-200, 0, 200, 0);
+
+                // Pitch Lines
+                p5.strokeWeight(1);
+                for (let i = -90; i <= 90; i += 10) {
+                    let y = i * 2; // Scale pitch to canvas
+                    if (i !== 0) {
+                        p5.line(-20, y, 20, y);
+                        p5.textSize(12);
+                        p5.fill(255);
+                        p5.noStroke();
+                        p5.text(`${i}°`, 30, y + 4);
+                    }
+                }
+
+                p5.pop();
+
+                // Display Roll and Pitch
+                p5.fill(0, 255, 255);
+                p5.textSize(16);
+                p5.textAlign(p5.LEFT);
+                p5.text(`Roll: ${roll.toFixed(1)}°`, 10, 380);
+                p5.text(`Pitch: ${pitch.toFixed(1)}°`, 10, 360);
+                p5.textAlign(p5.CENTER);
+                p5.text(`TARGET: ${selectedValue || 'NONE'}`, 200, 390);
+            };
 
             return (
                 <div className="bg-gray-900 p-6 futuristic-border h-[450px] flex flex-col justify-center items-center scan-effect">
                     <h2 className="text-xl font-bold mb-4 text-[#00FFFF]">SIMULATION GRID</h2>
-                    <div className="relative w-full h-full">
-                        <div className="absolute w-6 h-6 bg-[#00FF00] rounded-full animate-[move_4s_linear_infinite]"
-                             style={{ transform: `translate(${position.x}px, ${position.y}px)` }}></div>
-                        <p className="text-[#00FF00] mt-4 text-center">TARGET: {selectedValue || 'NONE'}</p>
-                    </div>
+                    <div id="simulation-canvas" className="w-[400px] h-[400px]"></div>
+                    <script type="text/babel">
+                        new p5((p5) => {{
+                            p5.setup = () => {setup(p5, document.getElementById('simulation-canvas'));};
+                            p5.draw = () => {draw(p5);};
+                        }}, document.getElementById('simulation-canvas'));
+                    </script>
                 </div>
             );
         }
